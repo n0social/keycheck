@@ -5,10 +5,14 @@ import { Search, AlertTriangle, CheckCircle, Loader2, ShieldAlert, ChevronRight,
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+import { loadStripe } from "@stripe/stripe-js";
+
 // Helper for tailwind classes
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 interface Finding {
   file: string;
@@ -26,6 +30,26 @@ export default function Home() {
   const [error, setError] = useState("");
   const [remediationLoading, setRemediationLoading] = useState<number | null>(null);
   const [remediations, setRemediations] = useState<Record<number, string>>({});
+  const [isPro, setIsPro] = useState(false); // Mock pro state for now
+
+  const handleCheckout = async () => {
+    try {
+      const stripe = await stripePromise;
+      if (!stripe) throw new Error("Stripe failed to load");
+
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId: "price_1234567890" }), // Replace with real Price ID
+      });
+
+      const { sessionId } = await res.json();
+      await stripe.redirectToCheckout({ sessionId });
+    } catch (err) {
+      console.error(err);
+      alert("Checkout failed. Please check console.");
+    }
+  };
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +83,14 @@ export default function Home() {
   };
 
   const getRemediation = async (index: number, finding: Finding) => {
+    if (!isPro) {
+      // Show upgrade modal or alert
+      if (confirm("AI Remediation is a Pro feature. Upgrade now to unlock detailed fix instructions?")) {
+        handleCheckout();
+      }
+      return;
+    }
+
     if (remediations[index]) {
         // Toggle visibility if needed, or just do nothing
         return; 
@@ -135,6 +167,40 @@ export default function Home() {
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <p>{error}</p>
+          </div>
+        )}
+
+        {/* Pricing Teaser */}
+        {!isPro && !scanned && (
+          <div className="mt-16 grid md:grid-cols-2 gap-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Free Plan</h3>
+              <ul className="space-y-2 text-slate-600 mb-6">
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> Unlimited Public Scans</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> Basic Secret Detection</li>
+                <li className="flex items-center gap-2 text-slate-400"><CheckCircle className="w-4 h-4" /> AI Remediation Steps</li>
+              </ul>
+              <button disabled className="w-full py-2 px-4 bg-slate-100 text-slate-400 font-medium rounded-lg cursor-not-allowed">
+                Current Plan
+              </button>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-indigo-100 ring-1 ring-indigo-500 relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                RECOMMENDED
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Pro Plan</h3>
+              <ul className="space-y-2 text-slate-600 mb-6">
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> Unlimited Public Scans</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> Advanced Secret Detection</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> AI Remediation Steps</li>
+              </ul>
+              <button 
+                onClick={handleCheckout}
+                className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Upgrade for $9/mo
+              </button>
+            </div>
           </div>
         )}
       </div>
