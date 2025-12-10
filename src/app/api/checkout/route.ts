@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       cancel_url: `${request.headers.get("origin")}/?canceled=true`,
     });
 
-    return NextResponse.json({ sessionId: session.id });
+    return NextResponse.json({ sessionId: session.id, url: session.url });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

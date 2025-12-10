@@ -68,8 +68,12 @@ export default function Home() {
         body: JSON.stringify({}), // No priceId needed, handled on server
       });
 
-      const { sessionId } = await res.json();
-      await stripe.redirectToCheckout({ sessionId });
+      const { url } = await res.json();
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
     } catch (err) {
       console.error(err);
       alert("Checkout failed. Please check console.");
