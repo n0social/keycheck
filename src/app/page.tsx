@@ -31,6 +31,31 @@ export default function Home() {
   const [remediationLoading, setRemediationLoading] = useState<number | null>(null);
   const [remediations, setRemediations] = useState<Record<number, string>>({});
   const [isPro, setIsPro] = useState(false); // Mock pro state for now
+  const [showPaywall, setShowPaywall] = useState(false);
+
+  // Check for payment success on load
+  if (typeof window !== "undefined") {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get("session_id");
+    if (sessionId && urlParams.get("payment_success")) {
+        // Clear params to prevent re-verification loop
+        window.history.replaceState({}, document.title, "/");
+        
+        // Verify payment
+        fetch("/api/verify-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert("Payment successful! You have 1 scan credit.");
+                setShowPaywall(false);
+            }
+        });
+    }
+  }
 
   const handleCheckout = async () => {
     try {
@@ -40,7 +65,7 @@ export default function Home() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId: "price_1234567890" }), // Replace with real Price ID
+        body: JSON.stringify({}), // No priceId needed, handled on server
       });
 
       const { sessionId } = await res.json();
@@ -58,6 +83,7 @@ export default function Home() {
     setFindings([]);
     setScanned(false);
     setRemediations({});
+    setShowPaywall(false);
 
     try {
       const res = await fetch("/api/scan", {
@@ -67,6 +93,11 @@ export default function Home() {
       });
       
       const data = await res.json();
+      
+      if (res.status === 402) {
+        setShowPaywall(true);
+        throw new Error(data.message);
+      }
       
       if (!res.ok) {
         throw new Error(data.error || "Failed to scan repository");
@@ -83,14 +114,7 @@ export default function Home() {
   };
 
   const getRemediation = async (index: number, finding: Finding) => {
-    if (!isPro) {
-      // Show upgrade modal or alert
-      if (confirm("AI Remediation is a Pro feature. Upgrade now to unlock detailed fix instructions?")) {
-        handleCheckout();
-      }
-      return;
-    }
-
+    // AI Remediation is now included in the scan price (free or paid)
     if (remediations[index]) {
         // Toggle visibility if needed, or just do nothing
         return; 
@@ -166,42 +190,25 @@ export default function Home() {
         {error && (
           <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <p>{error}</p>
+            <div>
+                <p className="font-bold">{error}</p>
+                {showPaywall && (
+                    <button 
+                        onClick={handleCheckout}
+                        className="mt-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-2 px-4 rounded"
+                    >
+                        Buy 1 Scan for $0.99
+                    </button>
+                )}
+            </div>
           </div>
         )}
 
-        {/* Pricing Teaser */}
-        {!isPro && !scanned && (
-          <div className="mt-16 grid md:grid-cols-2 gap-8">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h3 className="text-lg font-bold text-slate-900 mb-2">Free Plan</h3>
-              <ul className="space-y-2 text-slate-600 mb-6">
-                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> Unlimited Public Scans</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500" /> Basic Secret Detection</li>
-                <li className="flex items-center gap-2 text-slate-400"><CheckCircle className="w-4 h-4" /> AI Remediation Steps</li>
-              </ul>
-              <button disabled className="w-full py-2 px-4 bg-slate-100 text-slate-400 font-medium rounded-lg cursor-not-allowed">
-                Current Plan
-              </button>
+        {/* Pricing Teaser - Removed Pro Plan UI, replaced with simple info */}
+        {!scanned && !error && (
+            <div className="mt-12 text-center text-slate-500 text-sm">
+                <p>First scan is free. Additional scans are $0.99 each.</p>
             </div>
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-indigo-100 ring-1 ring-indigo-500 relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                RECOMMENDED
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-2">Pro Plan</h3>
-              <ul className="space-y-2 text-slate-600 mb-6">
-                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> Unlimited Public Scans</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> Advanced Secret Detection</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-indigo-500" /> AI Remediation Steps</li>
-              </ul>
-              <button 
-                onClick={handleCheckout}
-                className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
-              >
-                Upgrade for $9/mo
-              </button>
-            </div>
-          </div>
         )}
       </div>
 

@@ -1,9 +1,31 @@
 import { NextResponse } from "next/server";
 import { getRepoFiles, getFileContent } from "@/lib/github";
 import { scanContent } from "@/lib/scanner";
+import { ipScanCount, ipCredits, getClientIp } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
+    const ip = getClientIp(request);
+    const scans = ipScanCount.get(ip) || 0;
+    const credits = ipCredits.get(ip) || 0;
+
+    // Logic: 1 Free scan. After that, need credits.
+    if (scans >= 1 && credits <= 0) {
+      return NextResponse.json({ 
+        error: "Free scan limit reached", 
+        code: "LIMIT_REACHED",
+        message: "You have used your free scan. Please purchase a credit to continue."
+      }, { status: 402 });
+    }
+
+    // Consume credit if using paid scan
+    if (scans >= 1) {
+      ipCredits.set(ip, credits - 1);
+    }
+
+    // Increment scan count
+    ipScanCount.set(ip, scans + 1);
+
     const { repoUrl } = await request.json();
 
     if (!repoUrl) {
